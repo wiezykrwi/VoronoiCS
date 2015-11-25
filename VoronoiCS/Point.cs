@@ -5,6 +5,7 @@ namespace VoronoiCS
     [DebuggerDisplay("Point ({X}, {Y})")]
     internal class Point
     {
+        public Point DoublePoint { get; private set; }
         public double X { get; private set; }
         public double Y { get; private set; }
         public string Name { get; private set; }
@@ -24,6 +25,11 @@ namespace VoronoiCS
 
             Name = name;
             RealPoint = true;
+        }
+
+        public Point(double x, double y, string name, Point doublePoint) : this(x, y, name)
+        {
+            DoublePoint = doublePoint;
         }
 
         protected bool Equals(Point other)

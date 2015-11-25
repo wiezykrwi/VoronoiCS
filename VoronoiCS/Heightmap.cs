@@ -85,6 +85,7 @@ namespace VoronoiCS
 
         public void Run()
         {
+            // no use generating sea/lake?
             // 0 = sea
             // 1 = lake
             // 2 = land
@@ -97,7 +98,7 @@ namespace VoronoiCS
             {
                 for (int j = 0; j < _size.Height; j++)
                 {
-                    _map[i, j] = Noise(inputMap, i, j);
+                    _map[i, j] = Noise1(inputMap, i, j);
                 }
             }
         }
@@ -110,7 +111,7 @@ namespace VoronoiCS
             {
                 for (int j = 0; j < _size.Height + 1; j++)
                 {
-                    inputMap[i, j] = _random.Next(_random.Next(0, 5), 5);
+                    inputMap[i, j] = _random.Next(_random.Next(0, 3), 3);
                 }
             }
             return inputMap;
