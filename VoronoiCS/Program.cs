@@ -14,31 +14,31 @@ namespace VoronoiCS
         {
             Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
 
-//            var tempHeightMap = new Heightmap2(new Size(256, 256));
-//            tempHeightMap.Run();
-//            using (var image = new Bitmap(256, 256))
-//            {
-//                for (int i = 0; i < 256; i++)
-//                {
-//                    for (int j = 0; j < 256; j++)
-//                    {
-//                        var t = tempHeightMap.GetCell(i, j);
-//                        switch (t)
-//                        {
-//                            case 0:
-//                                image.SetPixel(i, j, Color.ForestGreen);
-//                                break;
-//                            case 1:
-//                                image.SetPixel(i, j, Color.Green);
-//                                break;
-//                            case 2:
-//                                image.SetPixel(i, j, Color.DarkGreen);
-//                                break;
-//                        }
-//                    }
-//                }
-//                image.Save("LowlangsTexture.png");
-//            }
+            var tempHeightMap = new Heightmap2(new Size(256, 256));
+            tempHeightMap.Run();
+            using (var image = new Bitmap(256, 256))
+            {
+                for (int i = 0; i < 256; i++)
+                {
+                    for (int j = 0; j < 256; j++)
+                    {
+                        var t = tempHeightMap.GetCell(i, j);
+                        switch (t)
+                        {
+                            case 0:
+                                image.SetPixel(i, j, Color.ForestGreen);
+                                break;
+                            case 1:
+                                image.SetPixel(i, j, Color.Green);
+                                break;
+                            case 2:
+                                image.SetPixel(i, j, Color.DarkGreen);
+                                break;
+                        }
+                    }
+                }
+                image.Save("LowlandsTexture.png");
+            }
 
             Console.WriteLine("Generating heightmap");
             var heightmap = new Heightmap2(new Size(128, 128));
@@ -52,7 +52,7 @@ namespace VoronoiCS
 
             int width = sliceSize * slicesWidth;
             int height = sliceSize * slicesHeight;
-            int dotCount = 1000;
+            int dotCount = 2000;
 
             var rnd = new Random();
             var points = new HashSet<Point>();
@@ -76,7 +76,9 @@ namespace VoronoiCS
             for (int i = 0; i < 3; i++)
             {
                 Console.WriteLine("Fixing faulty edges");
-                var semiEdges = voronoi.Edges.Where(e => (IsOutOfMap(e.Start, width * 2, height) && !IsOutOfMap(e.End, width * 2, height)) || (!IsOutOfMap(e.Start, width * 2, height) && IsOutOfMap(e.End, width * 2, height)));
+                var semiEdges =
+                    voronoi.Edges.Where(
+                        e => (IsOutOfMap(e.Start, width * 2, height) && !IsOutOfMap(e.End, width * 2, height)) || (!IsOutOfMap(e.Start, width * 2, height) && IsOutOfMap(e.End, width * 2, height)));
                 foreach (var semiEdge in semiEdges)
                 {
                     FixFaultyEdge(semiEdge, width * 2, height);
@@ -92,11 +94,11 @@ namespace VoronoiCS
                     {
                         var centerPointOfPoints = GetCenterPointOfPoints(c.Vertices, width * 2, height);
                         // account for cells having their center shifted to the other side
-                        if (centerPointOfPoints.X > ((double)width / 2d) * 3d)
+                        if (centerPointOfPoints.X > ((double) width / 2d) * 3d)
                         {
                             centerPointOfPoints = new Point(centerPointOfPoints.X - width, centerPointOfPoints.Y);
                         }
-                        else if (centerPointOfPoints.X < ((double)width / 2))
+                        else if (centerPointOfPoints.X < ((double) width / 2))
                         {
                             centerPointOfPoints = new Point(centerPointOfPoints.X + width, centerPointOfPoints.Y);
                         }
@@ -115,7 +117,7 @@ namespace VoronoiCS
                 // create new wraparound for these points
                 Console.WriteLine("Duplicating points for wraparound map");
                 pointsForWrapAroundMap = MakePointsForWrapAroundMap(points, width);
-                
+
                 // generate voronoi
                 Console.WriteLine("Computing wraparound voronoi");
                 voronoi.Compute(pointsForWrapAroundMap, width * 2, height);
@@ -123,7 +125,9 @@ namespace VoronoiCS
             }
 
             Console.WriteLine("Fixing faulty edges");
-            var semiFinalEdges = voronoi.Edges.Where(e => (IsOutOfMap(e.Start, width * 2, height) && !IsOutOfMap(e.End, width * 2, height)) || (!IsOutOfMap(e.Start, width * 2, height) && IsOutOfMap(e.End, width * 2, height)));
+            var semiFinalEdges =
+                voronoi.Edges.Where(
+                    e => (IsOutOfMap(e.Start, width * 2, height) && !IsOutOfMap(e.End, width * 2, height)) || (!IsOutOfMap(e.Start, width * 2, height) && IsOutOfMap(e.End, width * 2, height)));
             foreach (var semiEdge in semiFinalEdges)
             {
                 FixFaultyEdge(semiEdge, width * 2, height);
@@ -150,7 +154,7 @@ namespace VoronoiCS
                     continue;
                 }
 
-                finalCell.Height = heightmap.GetCell((int)(finalCell.Site.X / ratioX) - 1, (int)(finalCell.Site.Y / ratioY) - 1);
+                finalCell.Height = heightmap.GetCell((int) (finalCell.Site.X / ratioX) - 1, (int) (finalCell.Site.Y / ratioY) - 1);
             }
 
             Console.WriteLine("Generating heightmap image");
@@ -368,10 +372,10 @@ namespace VoronoiCS
         {
             for (int i = 0; i < dotCount; i++)
             {
-                var x = (double) (rnd.NextDouble()*(width));
-                var y = (double) (rnd.NextDouble()*(height));
+                var x = (double) (rnd.NextDouble() * (width));
+                var y = (double) (rnd.NextDouble() * (height));
 
-                points.Add(new Point(x, y, (i+1).ToString()));
+                points.Add(new Point(x, y, (i + 1).ToString()));
             }
         }
 
@@ -445,7 +449,20 @@ namespace VoronoiCS
                         var center = GetCenterPointOfPoints(cell.Vertices, width, height);
                         var orderedCells = cell.Vertices.OrderBy(v => v, new ClockwisePointComparer(center));
 
-                        graphics.FillPolygon(color, orderedCells.Select(p => new PointF((float)p.X, (float)p.Y)).ToArray());
+                        var pointFs = orderedCells.Select(p => new PointF((float) p.X, (float) p.Y)).ToArray();
+                        graphics.FillPolygon(color, pointFs);
+
+//                        if (cell.Height == 0)
+//                        {
+//                            var maxX = cell.Vertices.Max(p => p.X);
+//                            var minX = cell.Vertices.Min(p => p.X);
+//                            var cellWidth = maxX - minX;
+//                            var maxY = cell.Vertices.Max(p => p.X);
+//                            var minY = cell.Vertices.Min(p => p.X);
+//                            var cellHeight = maxX - minX;
+//                            var noiseMap = new Heightmap2(new Size((int) cellWidth, (int) cellHeight));
+//                            
+//                        }
 
                         var otherCell = voronoi.Cells.Single(c => c.Site == cell.Site.DoublePoint);
                         if (otherCell.Vertices.Count == 0)
@@ -456,28 +473,28 @@ namespace VoronoiCS
                         var center2 = GetCenterPointOfPoints(otherCell.Vertices, width, height);
                         var orderedCells2 = otherCell.Vertices.OrderBy(v => v, new ClockwisePointComparer(center2));
 
-                        graphics.FillPolygon(color, orderedCells2.Select(p => new PointF((float)p.X, (float)p.Y)).ToArray());
+                        graphics.FillPolygon(color, orderedCells2.Select(p => new PointF((float) p.X, (float) p.Y)).ToArray());
                     }
-                    foreach (var cell in cells)
-                    {
-                        // fix vertices
-//                        var vertices = cell.Vertices.Select(vertex => new Point(vertex.X - halfwidth, vertex.Y, vertex.Name));
-                        var center = GetCenterPointOfPoints(cell.Vertices, width, height);
-                        var orderedCells = cell.Vertices.OrderBy(v => v, new ClockwisePointComparer(center));
-
-                        graphics.DrawPolygon(Pens.Blue, orderedCells.Select(p => new PointF((float)p.X, (float)p.Y)).ToArray());
-
-                        var otherCell = voronoi.Cells.Single(c => c.Site == cell.Site.DoublePoint);
-                        if (otherCell.Vertices.Count == 0)
-                        {
-                            continue;
-                        }
-
-                        var center2 = GetCenterPointOfPoints(otherCell.Vertices, width, height);
-                        var orderedCells2 = otherCell.Vertices.OrderBy(v => v, new ClockwisePointComparer(center2));
-
-                        graphics.DrawPolygon(Pens.Blue, orderedCells2.Select(p => new PointF((float)p.X, (float)p.Y)).ToArray());
-                    }
+//                    foreach (var cell in cells)
+//                    {
+//                        // fix vertices
+////                        var vertices = cell.Vertices.Select(vertex => new Point(vertex.X - halfwidth, vertex.Y, vertex.Name));
+//                        var center = GetCenterPointOfPoints(cell.Vertices, width, height);
+//                        var orderedCells = cell.Vertices.OrderBy(v => v, new ClockwisePointComparer(center));
+//
+//                        graphics.DrawPolygon(Pens.Blue, orderedCells.Select(p => new PointF((float) p.X, (float) p.Y)).ToArray());
+//
+//                        var otherCell = voronoi.Cells.Single(c => c.Site == cell.Site.DoublePoint);
+//                        if (otherCell.Vertices.Count == 0)
+//                        {
+//                            continue;
+//                        }
+//
+//                        var center2 = GetCenterPointOfPoints(otherCell.Vertices, width, height);
+//                        var orderedCells2 = otherCell.Vertices.OrderBy(v => v, new ClockwisePointComparer(center2));
+//
+//                        graphics.DrawPolygon(Pens.Blue, orderedCells2.Select(p => new PointF((float) p.X, (float) p.Y)).ToArray());
+//                    }
                 }
 
                 image.Save(filename);
@@ -489,24 +506,54 @@ namespace VoronoiCS
                         croppedGraphics.DrawImage(image, new Rectangle(0, 0, halfwidth, height), new Rectangle(halfwidth / 2, 0, halfwidth, height), GraphicsUnit.Pixel);
                     }
 
-                var directory = new DirectoryInfo(filename.Replace(".png", string.Empty));
-                directory.Create();
+                    var directory = new DirectoryInfo(filename.Replace(".png", string.Empty));
+                    directory.Create();
+                    var zoomDirectory = new DirectoryInfo(Path.Combine(directory.FullName, "20"));
+                    zoomDirectory.Create();
 
-                for (int i = 0; i < 8; i++)
-                {
-                    for (int j = 0; j < 16; j++)
+                    for (int i = 0; i < 8; i++)
                     {
-                        using (var slicedImage = new Bitmap(256, 256))
+                        for (int j = 0; j < 16; j++)
                         {
-                            using (var slicedGraphics = Graphics.FromImage(slicedImage))
+                            using (var slicedImage = new Bitmap(256, 256))
                             {
-                                slicedGraphics.DrawImage(croppedImage, new Rectangle(0, 0, 256, 256), new Rectangle(j * 256, i * 256, 256, 256), GraphicsUnit.Pixel);
-                            }
+                                using (var slicedGraphics = Graphics.FromImage(slicedImage))
+                                {
+                                    slicedGraphics.DrawImage(croppedImage, new Rectangle(0, 0, 256, 256), new Rectangle(j * 256, i * 256, 256, 256), GraphicsUnit.Pixel);
+                                }
 
-                            slicedImage.Save(Path.Combine(directory.Name, string.Format("slices_{0}_{1}.png", j, i)));
+                                var path = Path.Combine(directory.Name, zoomDirectory.Name, string.Format("slices_{0}_{1}.png", j, i));
+                                slicedImage.Save(path);
+                            }
                         }
                     }
-                }
+                    
+                    using (var resizedImage = new Bitmap(halfwidth/2, height/2))
+                    {
+                        using (var resizedGraphics = Graphics.FromImage(resizedImage))
+                        {
+                            resizedGraphics.DrawImage(croppedImage, new Rectangle(0, 0, halfwidth / 2, height / 2), new Rectangle(0, 0, halfwidth, height), GraphicsUnit.Pixel);
+                        }
+
+                        zoomDirectory = new DirectoryInfo(Path.Combine(directory.FullName, "19"));
+                        zoomDirectory.Create();
+
+                        for (int i = 0; i < 4; i++)
+                        {
+                            for (int j = 0; j < 8; j++)
+                            {
+                                using (var slicedImage = new Bitmap(256, 256))
+                                {
+                                    using (var slicedGraphics = Graphics.FromImage(slicedImage))
+                                    {
+                                        slicedGraphics.DrawImage(resizedImage, new Rectangle(0, 0, 256, 256), new Rectangle(j * 256, i * 256, 256, 256), GraphicsUnit.Pixel);
+                                    }
+
+                                    slicedImage.Save(Path.Combine(directory.Name, zoomDirectory.Name, string.Format("slices_{0}_{1}.png", j, i)));
+                                }
+                            }
+                        }
+                    }
 
                     croppedImage.Save(filename.Replace(".png", "-cropped.png"));
                 }
@@ -528,7 +575,7 @@ namespace VoronoiCS
                 graphics.DrawRectangle(Pens.Red, (float) point.X, (float) point.Y, 1, 1);
                 if (!string.IsNullOrEmpty(point.Name))
                 {
-                    graphics.DrawString(point.Name, new Font(FontFamily.GenericMonospace, 10.0f), Brushes.Black, (float)point.X, (float)point.Y);
+                    graphics.DrawString(point.Name, new Font(FontFamily.GenericMonospace, 10.0f), Brushes.Black, (float) point.X, (float) point.Y);
                 }
             }
         }
@@ -581,7 +628,7 @@ namespace VoronoiCS
             {
                 return 1;
             }
-            
+
             // points a and b are on the same line from the center
             // check which point is closer to the center
             double d1 = (a.X - _center.X) * (a.X - _center.X) + (a.Y - _center.Y) * (a.Y - _center.Y);
