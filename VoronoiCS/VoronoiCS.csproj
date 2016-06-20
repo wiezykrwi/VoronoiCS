@@ -55,6 +55,7 @@
     <Compile Include="HeightmapOptions.cs" />
     <Compile Include="Internal\CenterFinder.cs" />
     <Compile Include="Internal\FaultyEdgeFixer.cs" />
+    <Compile Include="Internal\MapExtender.cs" />
     <Compile Include="Internal\MapHelper.cs" />
     <Compile Include="Parabola.cs" />
     <Compile Include="Point.cs" />

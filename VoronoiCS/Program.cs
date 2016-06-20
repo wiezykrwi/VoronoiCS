@@ -66,17 +66,18 @@ namespace VoronoiCS
                 writer.Flush();
             }
 
-            Console.WriteLine("Duplicating points for wraparound map");
-            var pointsForWrapAroundMap = MakePointsForWrapAroundMap(points, settings.Width);
-            
-            var voronoi = new Voronoi();
-            Console.WriteLine("Computing wraparound voronoi");
-            voronoi.Compute(pointsForWrapAroundMap, settings.Width * 2, settings.Height);
-//            DrawWrapAroundMap(voronoi, pointsForWrapAroundMap, "VoronoiWrapAround.png", width * 2, height);
-
             var mapHelper = new MapHelper();
             var centerFinder = new CenterFinder(mapHelper);
             var faultyEdgeFixer = new FaultyEdgeFixer(mapHelper);
+            var mapExtender = new MapExtender();
+
+            Console.WriteLine("Duplicating points for wraparound map");
+            var pointsForWrapAroundMap = mapExtender.MakePointsForWrapAroundMap(points, settings.Width);
+
+            var voronoi = new Voronoi();
+            Console.WriteLine("Computing wraparound voronoi");
+            voronoi.Compute(pointsForWrapAroundMap, settings.Width * 2, settings.Height);
+            //            DrawWrapAroundMap(voronoi, pointsForWrapAroundMap, "VoronoiWrapAround.png", width * 2, height);
 
             // do y times:
             for (int i = 0; i < 3; i++)
@@ -92,7 +93,7 @@ namespace VoronoiCS
 
                 // create new wraparound for these points
                 Console.WriteLine("Duplicating points for wraparound map");
-                pointsForWrapAroundMap = MakePointsForWrapAroundMap(points, settings.Width);
+                pointsForWrapAroundMap = mapExtender.MakePointsForWrapAroundMap(points, settings.Width);
 
                 // generate voronoi
                 Console.WriteLine("Computing wraparound voronoi");
@@ -174,30 +175,6 @@ namespace VoronoiCS
 
                 image.Save("heightmap.png");
             }
-        }
-
-        private static HashSet<Point> MakePointsForWrapAroundMap(IEnumerable<Point> points, double width)
-        {
-            double halfWidth = width / 2;
-            var newPoints = new HashSet<Point>();
-
-            foreach (var point in points)
-            {
-                if (point.X > halfWidth)
-                {
-                    var doublePoint = new Point(point.X - halfWidth, point.Y);
-                    newPoints.Add(doublePoint); // pad left half
-                    newPoints.Add(new Point(point.X + halfWidth, point.Y, point.Name, doublePoint)); // real point
-                }
-                else
-                {
-                    var doublePoint = new Point(point.X + halfWidth * 3, point.Y);
-                    newPoints.Add(doublePoint); // pad right half
-                    newPoints.Add(new Point(point.X + halfWidth, point.Y, point.Name, doublePoint)); // real point
-                }
-            }
-
-            return newPoints;
         }
 
         private static void LoadPoints(Random rnd, VoronoiSettings settings, HashSet<Point> points)
