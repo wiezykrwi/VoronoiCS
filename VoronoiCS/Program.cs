@@ -1,11 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Drawing.Imaging;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
+
+using Newtonsoft.Json;
+
+using VoronoiCS.Internal;
 
 namespace VoronoiCS
 {
@@ -15,131 +18,97 @@ namespace VoronoiCS
         {
             Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
 
-//            var tempHeightMap = new Heightmap2(new Size(256, 256));
-//            tempHeightMap.Run();
-//            using (var image = new Bitmap(256, 256))
-//            {
-//                for (int i = 0; i < 256; i++)
-//                {
-//                    for (int j = 0; j < 256; j++)
-//                    {
-//                        var t = tempHeightMap.GetCell(i, j);
-//                        switch (t)
-//                        {
-//                            case 0:
-//                                image.SetPixel(i, j, Color.ForestGreen);
-//                                break;
-//                            case 1:
-//                                image.SetPixel(i, j, Color.Green);
-//                                break;
-//                            case 2:
-//                                image.SetPixel(i, j, Color.DarkGreen);
-//                                break;
-//                        }
-//                    }
-//                }
-//                image.Save("LowlandsTexture.png");
-//            }
-
             Console.WriteLine("Generating heightmap");
             var heightmap = new Heightmap2(new Size(128, 128));
             heightmap.Run();
 
 //            DrawHeightmap(heightmap);
 
-            int sliceSize = 256;
-            int slicesWidth = 16;
-            int slicesHeight = 8;
+            var basePath = DateTime.Now.ToString("yyyy-MM-dd_hh-mm-ss");
+            Directory.CreateDirectory(basePath);
 
-            int width = sliceSize * slicesWidth;
-            int height = sliceSize * slicesHeight;
-            int dotCount = 2000;
+            int seed;
 
-            var rnd = new Random();
+            if (args.Length == 0)
+            {
+                var seedRandom = new Random();
+                seed = seedRandom.Next();
+            }
+            else
+            {
+                seed = int.Parse(args[0]);
+            }
+
+            var settings = new VoronoiSettings
+            {
+                Seed = seed,
+                SliceSize = 256,
+                SlicesWidth = 16,
+                SlicesHeight = 8,
+                SiteCount = 2000
+            };
+
+            var jsonSerializer = JsonSerializer.CreateDefault();
+            using (var writer = new StreamWriter(new FileStream(Path.Combine(basePath, "settings.json"), FileMode.CreateNew)))
+            {
+                jsonSerializer.Serialize(writer, settings);
+                writer.Flush();
+            }
+
+            var rnd = new Random(settings.Seed);
             var points = new HashSet<Point>();
 
             Console.WriteLine("Generating random points");
-            LoadPoints(dotCount, rnd, width, height, points);
-
-            var voronoi = new Voronoi();
-            Console.WriteLine("Computing base voronoi");
-            voronoi.Compute(points, width, height);
-//            DrawBaseMap(voronoi, points, "VoronoiBase.png", width, height);
+            LoadPoints(rnd, settings, points);
+            using (var writer = new StreamWriter(new FileStream(Path.Combine(basePath, "points.json"), FileMode.CreateNew)))
+            {
+                jsonSerializer.Serialize(writer, points);
+                writer.Flush();
+            }
 
             Console.WriteLine("Duplicating points for wraparound map");
-            var pointsForWrapAroundMap = MakePointsForWrapAroundMap(points, width);
-
+            var pointsForWrapAroundMap = MakePointsForWrapAroundMap(points, settings.Width);
+            
+            var voronoi = new Voronoi();
             Console.WriteLine("Computing wraparound voronoi");
-            voronoi.Compute(pointsForWrapAroundMap, width * 2, height);
+            voronoi.Compute(pointsForWrapAroundMap, settings.Width * 2, settings.Height);
 //            DrawWrapAroundMap(voronoi, pointsForWrapAroundMap, "VoronoiWrapAround.png", width * 2, height);
+
+            var mapHelper = new MapHelper();
+            var centerFinder = new CenterFinder(mapHelper);
+            var faultyEdgeFixer = new FaultyEdgeFixer(mapHelper);
 
             // do y times:
             for (int i = 0; i < 3; i++)
             {
                 Console.WriteLine("Fixing faulty edges");
-                var semiEdges =
-                    voronoi.Edges.Where(
-                        e => (IsOutOfMap(e.Start, width * 2, height) && !IsOutOfMap(e.End, width * 2, height)) || (!IsOutOfMap(e.Start, width * 2, height) && IsOutOfMap(e.End, width * 2, height)));
-                foreach (var semiEdge in semiEdges)
-                {
-                    FixFaultyEdge(semiEdge, width * 2, height);
-                }
+                faultyEdgeFixer.FixFaultyEdges(voronoi, settings);
 
                 Console.WriteLine("Looking for center of cells");
-                var realCells = voronoi.Cells
-                    // filter the "real" cells
-                    .Where(c => c.Site.RealPoint).ToList();
-                var centerOfRealCells = realCells
-                    // find center for points
-                    .Select(c =>
-                    {
-                        var centerPointOfPoints = GetCenterPointOfPoints(c.Vertices, width * 2, height);
-                        // account for cells having their center shifted to the other side
-                        if (centerPointOfPoints.X > ((double) width / 2d) * 3d)
-                        {
-                            centerPointOfPoints = new Point(centerPointOfPoints.X - width, centerPointOfPoints.Y);
-                        }
-                        else if (centerPointOfPoints.X < ((double) width / 2))
-                        {
-                            centerPointOfPoints = new Point(centerPointOfPoints.X + width, centerPointOfPoints.Y);
-                        }
-                        // fix points to be real again
-                        var point = new Point(centerPointOfPoints.X - width / 2, centerPointOfPoints.Y, c.Site.Name);
-                        if (IsOutOfMap(point, width * 2, height))
-                        {
-                            return c.Site;
-                        }
-                        return point;
-                    }).ToList();
+                var centerOfRealCells = centerFinder.FindAllCenters(voronoi, settings);
 
                 Console.WriteLine("Setting new start point");
                 points = new HashSet<Point>(centerOfRealCells);
 
                 // create new wraparound for these points
                 Console.WriteLine("Duplicating points for wraparound map");
-                pointsForWrapAroundMap = MakePointsForWrapAroundMap(points, width);
+                pointsForWrapAroundMap = MakePointsForWrapAroundMap(points, settings.Width);
 
                 // generate voronoi
                 Console.WriteLine("Computing wraparound voronoi");
-                voronoi.Compute(pointsForWrapAroundMap, width * 2, height);
+                voronoi.Compute(pointsForWrapAroundMap, settings.Width * 2, settings.Height);
 //                DrawWrapAroundMap(voronoi, pointsForWrapAroundMap, string.Format("VoronoiWrapAround{0}.png", i + 1), width * 2, height);
             }
 
             Console.WriteLine("Fixing faulty edges");
-            var semiFinalEdges =
-                voronoi.Edges.Where(
-                    e => (IsOutOfMap(e.Start, width * 2, height) && !IsOutOfMap(e.End, width * 2, height)) || (!IsOutOfMap(e.Start, width * 2, height) && IsOutOfMap(e.End, width * 2, height)));
-            foreach (var semiEdge in semiFinalEdges)
-            {
-                FixFaultyEdge(semiEdge, width * 2, height);
-            }
+            faultyEdgeFixer.FixFaultyEdges(voronoi, settings);
 
             Console.WriteLine("Looking for final cells");
             var finalCells = voronoi.Cells
                 // filter the "real" cells
                 .Where(c => c.Site.RealPoint).ToList();
-            var ratioX = (width * 2) / 128d;
-            var ratioY = height / 128d;
+            var ratioX = (settings.Width * 2) / 128d;
+            var ratioY = settings.Height / 128d;
 
             Console.WriteLine("Applying heightmap to final cells");
             foreach (var finalCell in finalCells)
@@ -149,7 +118,7 @@ namespace VoronoiCS
                     continue;
                 }
 
-                if (finalCell.Vertices.Any(p => p.Y <= 0d || p.Y >= height))
+                if (finalCell.Vertices.Any(p => p.Y <= 0d || p.Y >= settings.Height))
                 {
                     finalCell.Height = -1;
                     continue;
@@ -159,130 +128,8 @@ namespace VoronoiCS
             }
 
             Console.WriteLine("Generating heightmap image");
-            DrawHeightmap2(voronoi, finalCells, string.Format("VoronoiHeightmap_{0}.png", DateTime.Now.ToString("yyyy-MM-dd_hh-mm-ss")), width * 2, height);
-        }
-
-        private static void FixFaultyEdge(Edge faultyEdge, int width, int height)
-        {
-            double deltaX = faultyEdge.End.X - faultyEdge.Start.X;
-            double deltaY = faultyEdge.End.Y - faultyEdge.Start.Y;
-
-            if (IsOutOfMap(faultyEdge.Start, width, height))
-            {
-                // Try fixing X axis
-                if (faultyEdge.Start.X < 0)
-                {
-                    double newX = 0.0d;
-                    double newY = FindNewPosition(faultyEdge.Start.X, newX, faultyEdge.Start.Y, deltaY, deltaX);
-
-                    faultyEdge.Left.Cell.Vertices.Remove(faultyEdge.Start);
-                    faultyEdge.Right.Cell.Vertices.Remove(faultyEdge.Start);
-                    faultyEdge.Start = new Point(newX, newY);
-                    faultyEdge.Left.Cell.Vertices.Add(faultyEdge.Start);
-                    faultyEdge.Right.Cell.Vertices.Add(faultyEdge.Start);
-                }
-                else if (faultyEdge.Start.X > width)
-                {
-                    double newX = width;
-                    double newY = FindNewPosition(faultyEdge.Start.X, newX, faultyEdge.Start.Y, deltaY, deltaX);
-
-                    faultyEdge.Left.Cell.Vertices.Remove(faultyEdge.Start);
-                    faultyEdge.Right.Cell.Vertices.Remove(faultyEdge.Start);
-                    faultyEdge.Start = new Point(newX, newY);
-                    faultyEdge.Left.Cell.Vertices.Add(faultyEdge.Start);
-                    faultyEdge.Right.Cell.Vertices.Add(faultyEdge.Start);
-                }
-                else if (faultyEdge.Start.Y < 0)
-                {
-                    double newY = 0.0d;
-                    double newX = FindNewPosition(faultyEdge.Start.Y, newY, faultyEdge.Start.X, deltaX, deltaY);
-
-                    faultyEdge.Left.Cell.Vertices.Remove(faultyEdge.Start);
-                    faultyEdge.Right.Cell.Vertices.Remove(faultyEdge.Start);
-                    faultyEdge.Start = new Point(newX, newY);
-                    faultyEdge.Left.Cell.Vertices.Add(faultyEdge.Start);
-                    faultyEdge.Right.Cell.Vertices.Add(faultyEdge.Start);
-                }
-                else if (faultyEdge.Start.Y > height)
-                {
-                    double newY = height;
-                    double newX = FindNewPosition(faultyEdge.Start.Y, newY, faultyEdge.Start.X, deltaX, deltaY);
-
-                    faultyEdge.Left.Cell.Vertices.Remove(faultyEdge.Start);
-                    faultyEdge.Right.Cell.Vertices.Remove(faultyEdge.Start);
-                    faultyEdge.Start = new Point(newX, newY);
-                    faultyEdge.Left.Cell.Vertices.Add(faultyEdge.Start);
-                    faultyEdge.Right.Cell.Vertices.Add(faultyEdge.Start);
-                }
-            }
-
-            if (IsOutOfMap(faultyEdge.End, width, height))
-            {
-                // Try fixing X axis
-                if (faultyEdge.End.X < 0)
-                {
-                    double newX = 0.0d;
-                    double newY = FindNewPosition(faultyEdge.Start.X, newX, faultyEdge.Start.Y, deltaY, deltaX);
-
-                    faultyEdge.Left.Cell.Vertices.Remove(faultyEdge.End);
-                    faultyEdge.Right.Cell.Vertices.Remove(faultyEdge.End);
-                    faultyEdge.End = new Point(newX, newY);
-                    faultyEdge.Left.Cell.Vertices.Add(faultyEdge.End);
-                    faultyEdge.Right.Cell.Vertices.Add(faultyEdge.End);
-                }
-                else if (faultyEdge.End.X > width)
-                {
-                    double newX = width;
-                    double newY = FindNewPosition(faultyEdge.Start.X, newX, faultyEdge.Start.Y, deltaY, deltaX);
-
-                    faultyEdge.Left.Cell.Vertices.Remove(faultyEdge.End);
-                    faultyEdge.Right.Cell.Vertices.Remove(faultyEdge.End);
-                    faultyEdge.End = new Point(newX, newY);
-                    faultyEdge.Left.Cell.Vertices.Add(faultyEdge.End);
-                    faultyEdge.Right.Cell.Vertices.Add(faultyEdge.End);
-                }
-                else if (faultyEdge.End.Y < 0)
-                {
-                    double newY = 0.0d;
-                    double newX = FindNewPosition(faultyEdge.Start.Y, newY, faultyEdge.Start.X, deltaX, deltaY);
-
-                    faultyEdge.Left.Cell.Vertices.Remove(faultyEdge.End);
-                    faultyEdge.Right.Cell.Vertices.Remove(faultyEdge.End);
-                    faultyEdge.End = new Point(newX, newY);
-                    faultyEdge.Left.Cell.Vertices.Add(faultyEdge.End);
-                    faultyEdge.Right.Cell.Vertices.Add(faultyEdge.End);
-                }
-                else if (faultyEdge.End.Y > height)
-                {
-                    double newY = height;
-                    double newX = FindNewPosition(faultyEdge.Start.Y, newY, faultyEdge.Start.X, deltaX, deltaY);
-
-                    faultyEdge.Left.Cell.Vertices.Remove(faultyEdge.End);
-                    faultyEdge.Right.Cell.Vertices.Remove(faultyEdge.End);
-                    faultyEdge.End = new Point(newX, newY);
-                    faultyEdge.Left.Cell.Vertices.Add(faultyEdge.End);
-                    faultyEdge.Right.Cell.Vertices.Add(faultyEdge.End);
-                }
-            }
-        }
-
-        private static double FindNewPosition(double startPosition, double newPosition, double otherPosition, double deltaTarget, double deltaSource)
-        {
-            double offsetY = newPosition - startPosition;
-            double ratio = offsetY / deltaSource;
-            double offsetX = deltaTarget * ratio;
-            double newX = otherPosition + offsetX;
-            return newX;
-        }
-
-        private static bool IsOutOfMap(Edge edge, int width, int height)
-        {
-            return IsOutOfMap(edge.Start, width, height) || IsOutOfMap(edge.End, width, height);
-        }
-
-        private static bool IsOutOfMap(Point point, int width, int height)
-        {
-            return double.IsNaN(point.X) || double.IsNaN(point.Y) || point.X < 0 || point.Y < 0 || point.X > width || point.Y > height;
+            var filename = Path.Combine(basePath, string.Format("VoronoiHeightmap_{0}.png", DateTime.Now.ToString("yyyy-MM-dd_hh-mm-ss")));
+            DrawHeightmap2(voronoi, finalCells, filename, settings.Width * 2, settings.Height);
         }
 
         private static void DrawHeightmap(Heightmap2 heightmap)
@@ -329,22 +176,6 @@ namespace VoronoiCS
             }
         }
 
-        private static Point GetCenterPointOfPoints(IEnumerable<Point> points, int width, int height)
-        {
-            double x = 0.0d;
-            double y = 0.0d;
-            int count = 0;
-
-            foreach (var point in points.Where(point => !IsOutOfMap(point, width, height)))
-            {
-                x += point.X;
-                y += point.Y;
-                count++;
-            }
-
-            return new Point(x / count, y / count);
-        }
-
         private static HashSet<Point> MakePointsForWrapAroundMap(IEnumerable<Point> points, double width)
         {
             double halfWidth = width / 2;
@@ -369,12 +200,12 @@ namespace VoronoiCS
             return newPoints;
         }
 
-        private static void LoadPoints(int dotCount, Random rnd, int width, int height, HashSet<Point> points)
+        private static void LoadPoints(Random rnd, VoronoiSettings settings, HashSet<Point> points)
         {
-            for (int i = 0; i < dotCount; i++)
+            for (int i = 0; i < settings.SiteCount; i++)
             {
-                var x = (double) (rnd.NextDouble() * (width));
-                var y = (double) (rnd.NextDouble() * (height));
+                var x = (double) (rnd.NextDouble() * (settings.Width));
+                var y = (double) (rnd.NextDouble() * (settings.Height));
 
                 points.Add(new Point(x, y, (i + 1).ToString()));
             }
@@ -492,41 +323,41 @@ namespace VoronoiCS
                     }
                     image.Save(filename);
                     return;
-                    foreach (var cell in cells.Where(c => c.Height != 0))
-                    {
-                        Brush color;
-                        switch (cell.Height)
-                        {
-                            case 1:
-                                color = Brushes.DarkGoldenrod;
-                                break;
-                            case 2:
-                                color = Brushes.DarkSlateGray;
-                                break;
-                            default:
-                                color = Brushes.White;
-                                break;
-                        }
-
-                        // fix vertices
-                        //                        var vertices = cell.Vertices.Select(vertex => new Point(vertex.X - halfwidth, vertex.Y, vertex.Name));
-                        var center = GetCenterPointOfPoints(cell.Vertices, width, height);
-                        var orderedCells = cell.Vertices.OrderBy(v => v, new ClockwisePointComparer(center));
-
-                        var pointFs = orderedCells.Select(p => new PointF((float)p.X, (float)p.Y)).ToArray();
-                        graphics.FillPolygon(color, pointFs);
-
-                        var otherCell = voronoi.Cells.Single(c => c.Site == cell.Site.DoublePoint);
-                        if (otherCell.Vertices.Count == 0)
-                        {
-                            continue;
-                        }
-
-                        var center2 = GetCenterPointOfPoints(otherCell.Vertices, width, height);
-                        var orderedCells2 = otherCell.Vertices.OrderBy(v => v, new ClockwisePointComparer(center2));
-
-                        graphics.FillPolygon(color, orderedCells2.Select(p => new PointF((float)p.X, (float)p.Y)).ToArray());
-                    }
+//                    foreach (var cell in cells.Where(c => c.Height != 0))
+//                    {
+//                        Brush color;
+//                        switch (cell.Height)
+//                        {
+//                            case 1:
+//                                color = Brushes.DarkGoldenrod;
+//                                break;
+//                            case 2:
+//                                color = Brushes.DarkSlateGray;
+//                                break;
+//                            default:
+//                                color = Brushes.White;
+//                                break;
+//                        }
+//
+//                        // fix vertices
+//                        //                        var vertices = cell.Vertices.Select(vertex => new Point(vertex.X - halfwidth, vertex.Y, vertex.Name));
+//                        var center = GetCenterPointOfPoints(cell.Vertices, width, height);
+//                        var orderedCells = cell.Vertices.OrderBy(v => v, new ClockwisePointComparer(center));
+//
+//                        var pointFs = orderedCells.Select(p => new PointF((float)p.X, (float)p.Y)).ToArray();
+//                        graphics.FillPolygon(color, pointFs);
+//
+//                        var otherCell = voronoi.Cells.Single(c => c.Site == cell.Site.DoublePoint);
+//                        if (otherCell.Vertices.Count == 0)
+//                        {
+//                            continue;
+//                        }
+//
+//                        var center2 = GetCenterPointOfPoints(otherCell.Vertices, width, height);
+//                        var orderedCells2 = otherCell.Vertices.OrderBy(v => v, new ClockwisePointComparer(center2));
+//
+//                        graphics.FillPolygon(color, orderedCells2.Select(p => new PointF((float)p.X, (float)p.Y)).ToArray());
+//                    }
 //                    foreach (var cell in cells)
 //                    {
 //                        // fix vertices
