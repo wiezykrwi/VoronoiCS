@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -14,31 +15,31 @@ namespace VoronoiCS
         {
             Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
 
-            var tempHeightMap = new Heightmap2(new Size(256, 256));
-            tempHeightMap.Run();
-            using (var image = new Bitmap(256, 256))
-            {
-                for (int i = 0; i < 256; i++)
-                {
-                    for (int j = 0; j < 256; j++)
-                    {
-                        var t = tempHeightMap.GetCell(i, j);
-                        switch (t)
-                        {
-                            case 0:
-                                image.SetPixel(i, j, Color.ForestGreen);
-                                break;
-                            case 1:
-                                image.SetPixel(i, j, Color.Green);
-                                break;
-                            case 2:
-                                image.SetPixel(i, j, Color.DarkGreen);
-                                break;
-                        }
-                    }
-                }
-                image.Save("LowlandsTexture.png");
-            }
+//            var tempHeightMap = new Heightmap2(new Size(256, 256));
+//            tempHeightMap.Run();
+//            using (var image = new Bitmap(256, 256))
+//            {
+//                for (int i = 0; i < 256; i++)
+//                {
+//                    for (int j = 0; j < 256; j++)
+//                    {
+//                        var t = tempHeightMap.GetCell(i, j);
+//                        switch (t)
+//                        {
+//                            case 0:
+//                                image.SetPixel(i, j, Color.ForestGreen);
+//                                break;
+//                            case 1:
+//                                image.SetPixel(i, j, Color.Green);
+//                                break;
+//                            case 2:
+//                                image.SetPixel(i, j, Color.DarkGreen);
+//                                break;
+//                        }
+//                    }
+//                }
+//                image.Save("LowlandsTexture.png");
+//            }
 
             Console.WriteLine("Generating heightmap");
             var heightmap = new Heightmap2(new Size(128, 128));
@@ -425,14 +426,77 @@ namespace VoronoiCS
                 {
                     graphics.Clear(Color.White);
 
-                    foreach (var cell in cells)
+                    foreach (var cell in cells.Where(c => c.Height == 0))
+                    {
+                        float maxX = (float) cell.Vertices.Max(p => p.X);
+                        float minX = (float) cell.Vertices.Min(p => p.X);
+                        int cellWidth = (int) (maxX - minX);
+                        float maxY = (float) cell.Vertices.Max(p => p.Y);
+                        float minY = (float) cell.Vertices.Min(p => p.Y);
+                        int cellHeight = (int) (maxY - minY);
+                        var noiseMap = new Heightmap2(new Size(cellWidth, cellHeight));
+                        noiseMap.Run();
+
+//                        using (var memStrm = new MemoryStream())
+                        {
+                            using (var noiseImage = new Bitmap(cellWidth, cellHeight))
+                            {
+                                for (int i = 0; i < cellWidth; i++)
+                                {
+                                    for (int j = 0; j < cellHeight; j++)
+                                    {
+                                        var t = noiseMap.GetCell(i, j);
+                                        switch (t)
+                                        {
+                                            case 0:
+                                                noiseImage.SetPixel(i, j, Color.ForestGreen);
+                                                break;
+                                            case 1:
+                                                noiseImage.SetPixel(i, j, Color.Green);
+                                                break;
+                                            case 2:
+                                                noiseImage.SetPixel(i, j, Color.DarkGreen);
+                                                break;
+                                        }
+                                    }
+                                }
+
+                                graphics.DrawImage(noiseImage, minX, minY);
+
+//                                noiseImage.Save("noise.png");
+                            }
+
+//                            memStrm.Flush();
+//                            memStrm.Position = 0;
+
+//                            using (var tempImage = new Bitmap(memStrm))
+//                            {
+//                                graphics.DrawImage(tempImage, minX, minY);
+
+//                                graphics.DrawLine(Pens.Blue, minX, minY - 5, minX, minY + tempImage.Height + 5);
+//                                graphics.DrawLine(Pens.Blue, minX - 5, minY, minX + tempImage.Width + 5, minY);
+//                                graphics.DrawLine(Pens.Blue, minX - 5, minY + tempImage.Height, minX + tempImage.Width + 5, minY + tempImage.Height);
+//                                graphics.DrawLine(Pens.Blue, minX + tempImage.Width, minY - 5, minX + tempImage.Width, minY + tempImage.Height + 5);
+//                            }
+                        }
+//                        var otherCell = voronoi.Cells.Single(c => c.Site == cell.Site.DoublePoint);
+//                        if (otherCell.Vertices.Count == 0)
+//                        {
+//                            continue;
+//                        }
+
+//                        var center2 = GetCenterPointOfPoints(otherCell.Vertices, width, height);
+//                        var orderedCells2 = otherCell.Vertices.OrderBy(v => v, new ClockwisePointComparer(center2));
+
+//                        graphics.FillPolygon(color, orderedCells2.Select(p => new PointF((float) p.X, (float) p.Y)).ToArray());
+                    }
+                    image.Save(filename);
+                    return;
+                    foreach (var cell in cells.Where(c => c.Height != 0))
                     {
                         Brush color;
                         switch (cell.Height)
                         {
-                            case 0:
-                                color = Brushes.ForestGreen;
-                                break;
                             case 1:
                                 color = Brushes.DarkGoldenrod;
                                 break;
@@ -449,20 +513,8 @@ namespace VoronoiCS
                         var center = GetCenterPointOfPoints(cell.Vertices, width, height);
                         var orderedCells = cell.Vertices.OrderBy(v => v, new ClockwisePointComparer(center));
 
-                        var pointFs = orderedCells.Select(p => new PointF((float) p.X, (float) p.Y)).ToArray();
+                        var pointFs = orderedCells.Select(p => new PointF((float)p.X, (float)p.Y)).ToArray();
                         graphics.FillPolygon(color, pointFs);
-
-//                        if (cell.Height == 0)
-//                        {
-//                            var maxX = cell.Vertices.Max(p => p.X);
-//                            var minX = cell.Vertices.Min(p => p.X);
-//                            var cellWidth = maxX - minX;
-//                            var maxY = cell.Vertices.Max(p => p.X);
-//                            var minY = cell.Vertices.Min(p => p.X);
-//                            var cellHeight = maxX - minX;
-//                            var noiseMap = new Heightmap2(new Size((int) cellWidth, (int) cellHeight));
-//                            
-//                        }
 
                         var otherCell = voronoi.Cells.Single(c => c.Site == cell.Site.DoublePoint);
                         if (otherCell.Vertices.Count == 0)
@@ -473,7 +525,7 @@ namespace VoronoiCS
                         var center2 = GetCenterPointOfPoints(otherCell.Vertices, width, height);
                         var orderedCells2 = otherCell.Vertices.OrderBy(v => v, new ClockwisePointComparer(center2));
 
-                        graphics.FillPolygon(color, orderedCells2.Select(p => new PointF((float) p.X, (float) p.Y)).ToArray());
+                        graphics.FillPolygon(color, orderedCells2.Select(p => new PointF((float)p.X, (float)p.Y)).ToArray());
                     }
 //                    foreach (var cell in cells)
 //                    {
@@ -578,62 +630,6 @@ namespace VoronoiCS
                     graphics.DrawString(point.Name, new Font(FontFamily.GenericMonospace, 10.0f), Brushes.Black, (float) point.X, (float) point.Y);
                 }
             }
-        }
-    }
-
-    internal class ClockwisePointComparer : IComparer<Point>
-    {
-        private readonly Point _center;
-
-        public ClockwisePointComparer(Point center)
-        {
-            _center = center;
-        }
-
-        public int Compare(Point a, Point b)
-        {
-            if (a == b)
-            {
-                return 0;
-            }
-
-            if (a.X - _center.X >= 0 && b.X - _center.X < 0)
-            {
-                return -1;
-            }
-
-            if (a.X - _center.X < 0 && b.X - _center.X >= 0)
-            {
-                return 1;
-            }
-
-            if (a.X - _center.X == 0 && b.X - _center.X == 0)
-            {
-                if (a.Y - _center.Y >= 0 || b.Y - _center.Y >= 0)
-                {
-                    return a.Y > b.Y ? -1 : 1;
-                }
-
-                return b.Y > a.Y ? -1 : 1;
-            }
-
-            // compute the cross product of vectors (center -> a) x (center -> b)
-            double det = (a.X - _center.X) * (b.Y - _center.Y) - (b.X - _center.X) * (a.Y - _center.Y);
-            if (det < 0)
-            {
-                return -1;
-            }
-
-            if (det > 0)
-            {
-                return 1;
-            }
-
-            // points a and b are on the same line from the center
-            // check which point is closer to the center
-            double d1 = (a.X - _center.X) * (a.X - _center.X) + (a.Y - _center.Y) * (a.Y - _center.Y);
-            double d2 = (b.X - _center.X) * (b.X - _center.X) + (b.Y - _center.Y) * (b.Y - _center.Y);
-            return d1 > d2 ? -1 : 1;
         }
     }
 }

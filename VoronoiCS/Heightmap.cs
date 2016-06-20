@@ -80,7 +80,7 @@ namespace VoronoiCS
 
         public int GetCell(int x, int y)
         {
-            return _map[y, x];
+            return _map[x, y];
         }
 
         public void Run()
